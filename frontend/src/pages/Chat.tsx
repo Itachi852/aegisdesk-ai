@@ -16,19 +16,19 @@ type ChatProps = {
 };
 
 const TEXT = {
-  loadFailed: "\u4f1a\u8bdd\u8be6\u60c5\u52a0\u8f7d\u5931\u8d25",
-  empty: "\u9009\u62e9\u4f1a\u8bdd\uff0c\u6216\u65b0\u5efa\u5bf9\u8bdd\u540e\u5f00\u59cb\u63d0\u95ee",
-  placeholder: "\u8bf7\u8f93\u5165\u95ee\u9898\uff0c\u6700\u591a 500 \u5b57",
-  send: "\u53d1\u9001",
-  answerNotSaved: "\u56de\u7b54\u4fdd\u5b58\u540e\u624d\u80fd\u53cd\u9988",
-  feedbackSuccess: "\u53cd\u9988\u5df2\u63d0\u4ea4",
-  feedbackFailed: "\u53cd\u9988\u63d0\u4ea4\u5931\u8d25",
-  like: "\u70b9\u8d5e",
-  dislike: "\u8e29",
-  feedbackTitle: "\u8865\u5145\u53cd\u9988",
-  submit: "\u63d0\u4ea4",
-  cancel: "\u53d6\u6d88",
-  feedbackPlaceholder: "\u53ef\u9009\u586b\uff1a\u8bf7\u8bf4\u660e\u8fd9\u4e2a\u56de\u7b54\u54ea\u91cc\u4e0d\u7406\u60f3"
+  loadFailed: "会话详情加载失败",
+  empty: "选择会话，或新建对话后开始提问",
+  placeholder: "请输入问题，最多 500 字",
+  send: "发送",
+  answerNotSaved: "回答保存后才能反馈",
+  feedbackSuccess: "反馈已提交",
+  feedbackFailed: "反馈提交失败",
+  like: "点赞",
+  dislike: "踩",
+  feedbackTitle: "补充反馈",
+  submit: "提交",
+  cancel: "取消",
+  feedbackPlaceholder: "可选填：请说明这个回答哪里不理想"
 };
 
 function toLocalMessage(item: ChatMessage): LocalMessage {

@@ -2,25 +2,28 @@ import { Button, Empty, Layout, message, Popconfirm } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { createSession, deleteSession, listSessions, type AuthUser, type ChatSession } from "./api/client";
 import { Chat } from "./pages/Chat";
+import { Knowledge } from "./pages/Knowledge";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 
 const { Header, Content, Sider } = Layout;
 
 const TEXT = {
-  loadSessionsFailed: "\u4f1a\u8bdd\u52a0\u8f7d\u5931\u8d25",
-  createSessionFailed: "\u65b0\u5efa\u5bf9\u8bdd\u5931\u8d25",
-  deleteSuccess: "\u5df2\u5220\u9664\u5bf9\u8bdd",
-  deleteFailed: "\u5220\u9664\u5bf9\u8bdd\u5931\u8d25",
-  newChat: "\u65b0\u5efa\u5bf9\u8bdd",
-  noSessions: "\u6682\u65e0\u4f1a\u8bdd",
-  untitled: "\u672a\u547d\u540d\u5bf9\u8bdd",
-  deleteTitle: "\u5220\u9664\u5bf9\u8bdd",
-  deleteDescription: "\u786e\u5b9a\u5220\u9664\u8fd9\u6761\u5386\u53f2\u5bf9\u8bdd\u5417\uff1f",
-  delete: "\u5220\u9664",
-  cancel: "\u53d6\u6d88",
-  appTitle: "\u4f01\u4e1a\u667a\u80fd\u5ba2\u670d\u7cfb\u7edf",
-  logout: "\u9000\u51fa"
+  loadSessionsFailed: "会话加载失败",
+  createSessionFailed: "新建对话失败",
+  deleteSuccess: "已删除对话",
+  deleteFailed: "删除对话失败",
+  newChat: "新建对话",
+  noSessions: "暂无会话",
+  untitled: "未命名对话",
+  deleteTitle: "删除对话",
+  deleteDescription: "确定删除这条历史对话吗？",
+  delete: "删除",
+  cancel: "取消",
+  appTitle: "企业智能客服系统",
+  logout: "退出",
+  chat: "智能问答",
+  knowledge: "知识库"
 };
 
 function readStoredUser(): AuthUser | null {
@@ -39,6 +42,7 @@ export function App() {
   const [authPage, setAuthPage] = useState<"login" | "register">("login");
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<"chat" | "knowledge">("chat");
 
   const loadSessions = useCallback(async () => {
     if (!localStorage.getItem("token")) return;
@@ -107,12 +111,20 @@ export function App() {
     <Layout className="app-shell">
       <Sider width={280} theme="light" className="session-sidebar">
         <div className="brand">AegisDesk AI</div>
-        <div className="session-actions">
+        <div className="main-nav">
+          <Button block type={activeView === "chat" ? "primary" : "default"} onClick={() => setActiveView("chat")}>
+            {TEXT.chat}
+          </Button>
+          <Button block type={activeView === "knowledge" ? "primary" : "default"} onClick={() => setActiveView("knowledge")}>
+            {TEXT.knowledge}
+          </Button>
+        </div>
+        {activeView === "chat" ? <div className="session-actions">
           <Button type="primary" block onClick={newChat}>
             + {TEXT.newChat}
           </Button>
-        </div>
-        <div className="session-list">
+        </div> : null}
+        {activeView === "chat" ? <div className="session-list">
           {sessions.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={TEXT.noSessions} />
           ) : (
@@ -149,7 +161,7 @@ export function App() {
               </div>
             ))
           )}
-        </div>
+        </div> : null}
       </Sider>
       <Layout>
         <Header className="topbar">
@@ -162,11 +174,15 @@ export function App() {
           </div>
         </Header>
         <Content className="content">
-          <Chat
-            sessionId={selectedSessionId}
-            onSessionSelected={setSelectedSessionId}
-            onSessionsChanged={loadSessions}
-          />
+          {activeView === "chat" ? (
+            <Chat
+              sessionId={selectedSessionId}
+              onSessionSelected={setSelectedSessionId}
+              onSessionsChanged={loadSessions}
+            />
+          ) : (
+            <Knowledge />
+          )}
         </Content>
       </Layout>
     </Layout>

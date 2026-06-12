@@ -28,6 +28,7 @@ CREATE TABLE chat_messages (
 
 CREATE TABLE knowledge_documents (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
   name VARCHAR(255) NOT NULL,
   file_type VARCHAR(32) NOT NULL,
   status VARCHAR(32) NOT NULL,

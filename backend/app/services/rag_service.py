@@ -1,21 +1,22 @@
 from app.core.config import settings
-from app.prompts.qa_prompt import build_qa_prompt
+from app.prompts.qa_prompt import build_general_prompt, build_qa_prompt
 from app.services.llm_service import stream_llm
 from app.services.vector_service import search_chunks
 
 
 async def rag_answer_stream(payload: dict):
     question = (payload.get("question") or "").strip()
+    user_id = payload.get("user_id")
     if len(question) > settings.max_question_length:
         yield {"event": "error", "data": {"message": "单次提问不能超过 500 字"}}
         return
 
-    chunks = await search_chunks(question)
+    chunks = await search_chunks(question, user_id=user_id)
     if not chunks:
-        yield {
-            "event": "message",
-            "data": {"type": "delta", "content": "抱歉，当前知识库中没有检索到相关内容，暂时无法准确回答该问题。"},
-        }
+        prompt = build_general_prompt(question=question, history=payload.get("history", []))
+        async for token in stream_llm(prompt):
+            yield {"event": "message", "data": {"type": "delta", "content": token}}
+
         yield {"event": "done", "data": {"sources": []}}
         return
 

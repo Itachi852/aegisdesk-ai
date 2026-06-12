@@ -3,20 +3,20 @@ import { useState } from "react";
 import { login, type AuthUser } from "../api/client";
 
 const TEXT = {
-  subtitle: "\u767b\u5f55\u4f01\u4e1a\u667a\u80fd\u5ba2\u670d\u7cfb\u7edf",
-  account: "\u90ae\u7bb1\u6216\u624b\u673a\u53f7",
-  password: "\u5bc6\u7801",
-  required: "\u5fc5\u586b",
-  invalidAccount: "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u90ae\u7bb1\u6216\u624b\u673a\u53f7\u683c\u5f0f",
-  minPassword: "\u81f3\u5c11 6 \u4f4d",
-  minPasswordRule: "\u5bc6\u7801\u81f3\u5c11 6 \u4f4d",
-  login: "\u767b\u5f55",
-  loginSuccess: "\u767b\u5f55\u6210\u529f",
-  loginFailed: "\u767b\u5f55\u5931\u8d25",
-  invalidCredentials: "\u8d26\u53f7\u6216\u5bc6\u7801\u9519\u8bef\uff0c\u8bf7\u91cd\u65b0\u8f93\u5165",
-  serviceError: "\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u540e\u7aef\u670d\u52a1\u662f\u5426\u6b63\u5e38",
-  noAccount: "\u8fd8\u6ca1\u6709\u8d26\u53f7\uff1f",
-  goRegister: "\u53bb\u6ce8\u518c"
+  subtitle: "登录企业智能客服系统",
+  account: "邮箱或手机号",
+  password: "密码",
+  required: "必填",
+  invalidAccount: "请输入正确的邮箱或手机号格式",
+  minPassword: "至少 6 位",
+  minPasswordRule: "密码至少 6 位",
+  login: "登录",
+  loginSuccess: "登录成功",
+  loginFailed: "登录失败",
+  invalidCredentials: "账号或密码错误，请重新输入",
+  serviceError: "登录失败，请检查后端服务是否正常",
+  noAccount: "还没有账号？",
+  goRegister: "去注册"
 };
 
 const EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;

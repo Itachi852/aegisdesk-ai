@@ -28,6 +28,12 @@ body {
   font-weight: 700;
 }
 
+.main-nav {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+
 .session-actions {
   padding: 0 16px 14px;
 }
@@ -271,6 +277,36 @@ body {
 
 .auth-mode label {
   text-align: center;
+}
+
+.knowledge-page {
+  height: calc(100vh - 104px);
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.knowledge-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.knowledge-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2328;
+}
+
+.knowledge-hint {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {

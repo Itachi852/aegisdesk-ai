@@ -13,7 +13,6 @@ langchain==0.3.13
 langchain-community==0.3.13
 langchain-openai==0.2.14
 langgraph==0.2.60
-sentence-transformers==3.3.1
 PyMuPDF==1.25.1
 markdown==3.7
 mysql-connector-python~=9.4.0

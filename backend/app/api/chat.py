@@ -75,6 +75,7 @@ async def stream_chat(
         async for event in rag_answer_stream(
             {
                 "session_id": session_id,
+                "user_id": current_user.id,
                 "question": payload.question,
             }
         ):

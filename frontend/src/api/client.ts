@@ -35,6 +35,16 @@ export type ChatSessionDetail = ChatSession & {
   messages: ChatMessage[];
 };
 
+export type KnowledgeDocument = {
+  id: number;
+  name: string;
+  file_type: string;
+  status: string;
+  error_message?: string | null;
+  chunk_count: number;
+  created_at: string;
+};
+
 type StreamChatOptions = {
   question: string;
   sessionId?: number | null;
@@ -52,13 +62,13 @@ function authHeaders(): Record<string, string> {
 
 function normalizeErrorMessage(message: string): string {
   if (message.includes("String should have at least 6 characters")) {
-    return "\u5bc6\u7801\u81f3\u5c11 6 \u4f4d";
+    return "密码至少 6 位";
   }
   if (message.includes("String should have at most 64 characters")) {
-    return "\u5bc6\u7801\u4e0d\u80fd\u8d85\u8fc7 64 \u4f4d";
+    return "密码不能超过 64 位";
   }
   if (message.includes("Field required")) {
-    return "\u8bf7\u586b\u5199\u5fc5\u586b\u9879";
+    return "请填写必填项";
   }
   return message;
 }
@@ -111,6 +121,17 @@ export async function deleteJson(path: string): Promise<void> {
   }
 }
 
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_PREFIX}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData
+  });
+  return parseResponse<T>(response);
+}
+
 export function login(account: string, password: string) {
   return postJson<AuthResponse>("/auth/login", { account, password });
 }
@@ -119,7 +140,7 @@ export function register(data: { email?: string; phone?: string; password: strin
   return postJson<AuthResponse>("/auth/register", data);
 }
 
-export function createSession(title = "\u65b0\u5efa\u5bf9\u8bdd") {
+export function createSession(title = "新建对话") {
   return postJson<ChatSessionDetail>("/sessions", { title });
 }
 
@@ -141,6 +162,19 @@ export function submitFeedback(data: { message_id: number; rating: FeedbackRatin
     "/feedback",
     data
   );
+}
+
+export function uploadKnowledgeDocument(file: File) {
+  return uploadFile<KnowledgeDocument>("/knowledge/documents", file);
+}
+
+export async function listKnowledgeDocuments() {
+  const data = await getJson<{ items: KnowledgeDocument[] }>("/knowledge/documents");
+  return data.items;
+}
+
+export function deleteKnowledgeDocument(documentId: number) {
+  return deleteJson(`/knowledge/documents/${documentId}`);
 }
 
 export async function streamChat(options: StreamChatOptions) {

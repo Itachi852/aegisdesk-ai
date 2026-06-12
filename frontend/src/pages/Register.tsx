@@ -3,24 +3,24 @@ import { useState } from "react";
 import { register, type AuthUser } from "../api/client";
 
 const TEXT = {
-  title: "\u521b\u5efa\u8d26\u53f7",
-  subtitle: "\u6ce8\u518c\u540e\u81ea\u52a8\u8fdb\u5165\u804a\u5929\u754c\u9762",
-  emailRegister: "\u90ae\u7bb1\u6ce8\u518c",
-  phoneRegister: "\u624b\u673a\u53f7\u6ce8\u518c",
-  email: "\u90ae\u7bb1",
-  phone: "\u624b\u673a\u53f7",
-  password: "\u5bc6\u7801",
-  required: "\u5fc5\u586b",
-  invalidEmail: "\u90ae\u7bb1\u683c\u5f0f\u4e0d\u6b63\u786e",
-  invalidPhone: "\u8bf7\u8f93\u5165\u6b63\u786e\u7684\u624b\u673a\u53f7\u683c\u5f0f",
-  phonePlaceholder: "\u8bf7\u8f93\u5165\u624b\u673a\u53f7",
-  minPassword: "\u81f3\u5c11 6 \u4f4d",
-  minPasswordRule: "\u5bc6\u7801\u81f3\u5c11 6 \u4f4d",
-  register: "\u6ce8\u518c",
-  registerSuccess: "\u6ce8\u518c\u6210\u529f",
-  registerFailed: "\u6ce8\u518c\u5931\u8d25",
-  hasAccount: "\u5df2\u6709\u8d26\u53f7\uff1f",
-  goLogin: "\u53bb\u767b\u5f55"
+  title: "创建账号",
+  subtitle: "注册后自动进入聊天界面",
+  emailRegister: "邮箱注册",
+  phoneRegister: "手机号注册",
+  email: "邮箱",
+  phone: "手机号",
+  password: "密码",
+  required: "必填",
+  invalidEmail: "邮箱格式不正确",
+  invalidPhone: "请输入正确的手机号格式",
+  phonePlaceholder: "请输入手机号",
+  minPassword: "至少 6 位",
+  minPasswordRule: "密码至少 6 位",
+  register: "注册",
+  registerSuccess: "注册成功",
+  registerFailed: "注册失败",
+  hasAccount: "已有账号？",
+  goLogin: "去登录"
 };
 
 type RegisterProps = {
