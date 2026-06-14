@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, chat, feedback, knowledge, sessions
 from app.core.config import settings
+from app.core.logger import setup_logging
 
+setup_logging()
 
 app = FastAPI(title=settings.app_name)
 

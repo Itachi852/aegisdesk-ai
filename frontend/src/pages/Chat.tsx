@@ -1,12 +1,24 @@
 import { Button, Empty, Input, Modal, message } from "antd";
-import { useEffect, useState } from "react";
-import { getSession, streamChat, submitFeedback, type ChatMessage, type FeedbackRating } from "../api/client";
+import { useCallback, useEffect, useState } from "react";
+import {
+  getChatQuota,
+  getSession,
+  streamChat,
+  submitFeedback,
+  type ChatQuota,
+  type ChatMessage,
+  type FeedbackRating,
+  type MessageSource
+} from "../api/client";
 
 type LocalMessage = {
   id?: number;
   role: "user" | "assistant";
   content: string;
+  thinking?: boolean;
+  intent?: string | null;
   feedback?: FeedbackRating;
+  sources?: MessageSource[];
 };
 
 type ChatProps = {
@@ -17,8 +29,10 @@ type ChatProps = {
 
 const TEXT = {
   loadFailed: "会话详情加载失败",
+  quotaLoadFailed: "提问次数加载失败",
   empty: "选择会话，或新建对话后开始提问",
   placeholder: "请输入问题，最多 500 字",
+  quotaReachedPlaceholder: "今日提问次数已达上限，请明天再试",
   send: "发送",
   answerNotSaved: "回答保存后才能反馈",
   feedbackSuccess: "反馈已提交",
@@ -28,15 +42,39 @@ const TEXT = {
   feedbackTitle: "补充反馈",
   submit: "提交",
   cancel: "取消",
-  feedbackPlaceholder: "可选填：请说明这个回答哪里不理想"
+  feedbackPlaceholder: "可选填：请说明这个回答哪里不理想",
+  thinking: "正在思考...",
+  answerFailed: "抱歉，当前暂时无法生成回答，请稍后再试。"
 };
+
+const INTENT_LABELS: Record<string, string> = {
+  product_consultation: "产品咨询",
+  after_sales: "售后问题",
+  chat: "闲聊",
+  complaint: "投诉",
+  other: "其他"
+};
+
+function dedupeSources(sources: MessageSource[] = []) {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = String(source.document_id || source.doc_name || source.chunk_id);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
 
 function toLocalMessage(item: ChatMessage): LocalMessage {
   return {
     id: item.id,
     role: item.role === "user" ? "user" : "assistant",
     content: item.content,
-    feedback: item.feedback || undefined
+    intent: item.intent || undefined,
+    feedback: item.feedback || undefined,
+    sources: dedupeSources(item.sources || [])
   };
 }
 
@@ -44,8 +82,40 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const [quota, setQuota] = useState<ChatQuota | null>(null);
   const [feedbackTarget, setFeedbackTarget] = useState<{ index: number; rating: FeedbackRating } | null>(null);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const quotaReached = quota ? !quota.available : false;
+
+  const loadQuota = useCallback(async () => {
+    try {
+      setQuota(await getChatQuota());
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : TEXT.quotaLoadFailed);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadQuota();
+  }, [loadQuota]);
+
+  useEffect(() => {
+    loadQuota();
+  }, [sessionId, loadQuota]);
+
+  useEffect(() => {
+    const refreshQuota = () => {
+      if (document.visibilityState === "visible") {
+        loadQuota();
+      }
+    };
+    document.addEventListener("visibilitychange", refreshQuota);
+    window.addEventListener("focus", loadQuota);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshQuota);
+      window.removeEventListener("focus", loadQuota);
+    };
+  }, [loadQuota]);
 
   useEffect(() => {
     if (loading) return;
@@ -62,22 +132,46 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
 
   const send = () => {
     const text = question.trim();
-    if (!text || loading) return;
+    if (!text || loading || quotaReached) return;
 
     setQuestion("");
     setLoading(true);
-    setMessages((prev) => [...prev, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: text },
+      { role: "assistant", content: TEXT.thinking, thinking: true }
+    ]);
 
     streamChat({
       question: text,
       sessionId,
-      onSession: onSessionSelected,
+      onSession: (sessionEvent) => {
+        onSessionSelected(sessionEvent.session_id);
+        setMessages((prev) => {
+          const next = [...prev];
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            if (next[index].role === "user" && next[index].content === text && !next[index].id) {
+              next[index] = {
+                ...next[index],
+                id: sessionEvent.user_message_id,
+                intent: sessionEvent.intent || undefined
+              };
+              break;
+            }
+          }
+          return next;
+        });
+      },
       onDelta: (delta) => {
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           if (!last || last.role !== "assistant") {
             return [...next, { role: "assistant", content: delta }];
+          }
+          if (last.thinking) {
+            next[next.length - 1] = { ...last, content: delta, thinking: false };
+            return next;
           }
           next[next.length - 1] = { ...last, content: last.content + delta };
           return next;
@@ -95,11 +189,39 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
           return next;
         });
       },
+      onSources: (sources) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            if (next[index].role === "assistant") {
+              next[index] = { ...next[index], sources: dedupeSources(sources) };
+              break;
+            }
+          }
+          return next;
+        });
+      },
       onDone: () => {
         setLoading(false);
+        loadQuota();
         onSessionsChanged();
       },
-      onError: (errorMessage) => message.error(errorMessage)
+      onError: (errorMessage) => {
+        message.error(errorMessage || TEXT.answerFailed);
+        loadQuota();
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant" && last.thinking) {
+            next.pop();
+          }
+          const previous = next[next.length - 1];
+          if (previous?.role === "user" && previous.content === text && !previous.id) {
+            next.pop();
+          }
+          return next;
+        });
+      }
     });
   };
 
@@ -135,8 +257,21 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
         ) : (
           messages.map((item, index) => (
             <div key={index} className={`message-row ${item.role}`}>
-              <div className={`message ${item.role}`}>{item.content}</div>
-              {item.role === "assistant" && item.content ? (
+              <div className={`message ${item.role} ${item.thinking ? "thinking" : ""}`}>{item.content}</div>
+              {item.role === "user" && item.intent ? (
+                <div className="message-intent">{INTENT_LABELS[item.intent] || "其他"}</div>
+              ) : null}
+              {item.role === "assistant" && item.sources?.length ? (
+                <div className="message-sources">
+                  <span>引用文件：</span>
+                  {dedupeSources(item.sources).map((source, sourceIndex) => (
+                    <span key={`${source.doc_name || "source"}-${sourceIndex}`} className="source-chip">
+                      {source.doc_name || "未知文档"}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {item.role === "assistant" && item.content && !item.thinking ? (
                 <div className="feedback-actions">
                   <Button
                     size="small"
@@ -161,6 +296,11 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
         )}
       </div>
       <div className="composer">
+        {quotaReached ? (
+          <div className="quota-hint">
+            今日提问次数已达上限（{quota?.limit} 次），请明天再试。
+          </div>
+        ) : null}
         <Input.TextArea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -172,9 +312,10 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
           }}
           maxLength={500}
           autoSize={{ minRows: 2, maxRows: 4 }}
-          placeholder={TEXT.placeholder}
+          disabled={quotaReached}
+          placeholder={quotaReached ? TEXT.quotaReachedPlaceholder : TEXT.placeholder}
         />
-        <Button type="primary" loading={loading} onClick={send}>
+        <Button type="primary" disabled={loading || quotaReached} onClick={send}>
           {TEXT.send}
         </Button>
       </div>

@@ -9,4 +9,6 @@ dist/
 .env
 .DS_Store
 ./backend/scripts
-./backend/uploads
+backend/uploads/
+backend/logs/
+uploads/

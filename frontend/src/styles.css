@@ -31,17 +31,33 @@ body {
 .main-nav {
   display: grid;
   gap: 8px;
+}
+
+.sidebar-section {
   padding: 0 16px 14px;
+}
+
+.conversation-section {
+  border-top: 1px solid #eef0f3;
+  padding-top: 14px;
+}
+
+.sidebar-section-title {
+  margin-bottom: 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
 .session-actions {
-  padding: 0 16px 14px;
+  margin-bottom: 12px;
 }
 
 .session-list {
-  height: calc(100vh - 112px);
+  height: calc(100vh - 224px);
   overflow: auto;
-  padding: 0 10px 16px;
+  padding-bottom: 16px;
 }
 
 .session-item {
@@ -183,6 +199,53 @@ body {
   border-bottom-left-radius: 6px;
 }
 
+.message.thinking {
+  color: #667085;
+  font-style: italic;
+}
+
+.message-intent {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  margin-top: 6px;
+  padding: 0 8px;
+  border: 1px solid #b9d6ff;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #1668dc;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.message-sources {
+  max-width: min(680px, 78%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 2px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .feedback-actions {
   display: flex;
   gap: 6px;
@@ -223,6 +286,13 @@ body {
   width: calc(100% - 32px);
   margin: 0 auto;
   box-sizing: border-box;
+}
+
+.quota-hint {
+  grid-column: 1 / -1;
+  color: #d92d20;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .auth-page {

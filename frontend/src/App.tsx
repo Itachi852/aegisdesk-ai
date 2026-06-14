@@ -22,8 +22,10 @@ const TEXT = {
   cancel: "取消",
   appTitle: "企业智能客服系统",
   logout: "退出",
+  mainFeatures: "主功能",
+  conversations: "对话",
   chat: "智能问答",
-  knowledge: "知识库"
+  knowledge: "知识管理"
 };
 
 function readStoredUser(): AuthUser | null {
@@ -111,57 +113,65 @@ export function App() {
     <Layout className="app-shell">
       <Sider width={280} theme="light" className="session-sidebar">
         <div className="brand">AegisDesk AI</div>
-        <div className="main-nav">
-          <Button block type={activeView === "chat" ? "primary" : "default"} onClick={() => setActiveView("chat")}>
-            {TEXT.chat}
-          </Button>
-          <Button block type={activeView === "knowledge" ? "primary" : "default"} onClick={() => setActiveView("knowledge")}>
-            {TEXT.knowledge}
-          </Button>
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">{TEXT.mainFeatures}</div>
+          <div className="main-nav">
+            <Button block type={activeView === "chat" ? "primary" : "default"} onClick={() => setActiveView("chat")}>
+              {TEXT.chat}
+            </Button>
+            <Button block type={activeView === "knowledge" ? "primary" : "default"} onClick={() => setActiveView("knowledge")}>
+              {TEXT.knowledge}
+            </Button>
+          </div>
         </div>
-        {activeView === "chat" ? <div className="session-actions">
-          <Button type="primary" block onClick={newChat}>
-            + {TEXT.newChat}
-          </Button>
-        </div> : null}
-        {activeView === "chat" ? <div className="session-list">
-          {sessions.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={TEXT.noSessions} />
-          ) : (
-            sessions.map((session) => (
-              <div
-                key={session.id}
-                className={`session-item ${session.id === selectedSessionId ? "active" : ""}`}
-                onClick={() => setSelectedSessionId(session.id)}
-              >
-                <div className="session-main">
-                  <span className="session-title">{session.title || TEXT.untitled}</span>
-                  <span className="session-time">{new Date(session.updated_at).toLocaleString()}</span>
-                </div>
-                <Popconfirm
-                  title={TEXT.deleteTitle}
-                  description={TEXT.deleteDescription}
-                  okText={TEXT.delete}
-                  cancelText={TEXT.cancel}
-                  onConfirm={(event) => {
-                    event?.stopPropagation();
-                    removeSession(session.id);
-                  }}
-                  onCancel={(event) => event?.stopPropagation()}
-                >
-                  <Button
-                    size="small"
-                    type="text"
-                    className="session-delete"
-                    onClick={(event) => event.stopPropagation()}
+        {activeView === "chat" ? (
+          <div className="sidebar-section conversation-section">
+            <div className="sidebar-section-title">{TEXT.conversations}</div>
+            <div className="session-actions">
+              <Button type="primary" block onClick={newChat}>
+                + {TEXT.newChat}
+              </Button>
+            </div>
+            <div className="session-list">
+              {sessions.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={TEXT.noSessions} />
+              ) : (
+                sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`session-item ${session.id === selectedSessionId ? "active" : ""}`}
+                    onClick={() => setSelectedSessionId(session.id)}
                   >
-                    {TEXT.delete}
-                  </Button>
-                </Popconfirm>
-              </div>
-            ))
-          )}
-        </div> : null}
+                    <div className="session-main">
+                      <span className="session-title">{session.title || TEXT.untitled}</span>
+                      <span className="session-time">{new Date(session.updated_at).toLocaleString()}</span>
+                    </div>
+                    <Popconfirm
+                      title={TEXT.deleteTitle}
+                      description={TEXT.deleteDescription}
+                      okText={TEXT.delete}
+                      cancelText={TEXT.cancel}
+                      onConfirm={(event) => {
+                        event?.stopPropagation();
+                        removeSession(session.id);
+                      }}
+                      onCancel={(event) => event?.stopPropagation()}
+                    >
+                      <Button
+                        size="small"
+                        type="text"
+                        className="session-delete"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {TEXT.delete}
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
       </Sider>
       <Layout>
         <Header className="topbar">

@@ -33,9 +33,18 @@ class Settings(BaseSettings):
     embedding_base_url: str = ""
     embedding_api_key: str = ""
     embedding_model: str = "text-embedding-3-small"
+
+    rerank_url: str = ""
+    rerank_api_key: str = ""
+    rerank_model: str = "gte-rerank-v2"
+
     daily_question_limit: int = 100
     max_question_length: int = 500
     rag_top_k: int = 6
+    rag_rewrite_query_count: int = 3
+    rag_recall_per_query: int = 10
+    rag_rrf_top_k: int = 20
+    rag_rrf_k: int = 60
     rag_score_threshold: float = 0.5
 
     @computed_field
@@ -57,6 +66,11 @@ class Settings(BaseSettings):
     @property
     def resolved_embedding_api_key(self) -> str:
         return self.embedding_api_key or self.llm_api_key
+
+    @computed_field
+    @property
+    def resolved_rerank_api_key(self) -> str:
+        return self.rerank_api_key or self.llm_api_key
 
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 

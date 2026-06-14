@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from app.services.vector_service import delete_document_vectors, upsert_chunks
 from app.utils.text_splitter import split_text
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads/knowledge")
 SUPPORTED_SUFFIXES = {".txt", ".md"}
@@ -104,11 +106,21 @@ async def upload_document(
         db.refresh(document)
         return _document_response(document, len(chunks))
     except Exception as exc:
+        logger.exception(
+            "知识库文档处理失败，document_id=%s, user_id=%s, filename=%s",
+            document.id,
+            current_user.id,
+            file.filename,
+        )
         db.rollback()
         try:
             delete_document_vectors(document.id, current_user.id)
         except Exception:
-            pass
+            logger.exception(
+                "知识库文档处理失败后清理 Qdrant 向量失败，document_id=%s, user_id=%s",
+                document.id,
+                current_user.id,
+            )
         document = db.get(KnowledgeDocument, document.id)
         document.status = "失败"
         document.error_message = str(exc)

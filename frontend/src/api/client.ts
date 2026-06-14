@@ -19,7 +19,16 @@ export type ChatMessage = {
   content: string;
   intent?: string | null;
   feedback?: FeedbackRating | null;
+  sources?: MessageSource[];
   created_at: string;
+};
+
+export type MessageSource = {
+  doc_name?: string | null;
+  document_id?: number | null;
+  chunk_id?: number | null;
+  score?: number | null;
+  summary?: string | null;
 };
 
 export type FeedbackRating = "like" | "dislike";
@@ -35,6 +44,19 @@ export type ChatSessionDetail = ChatSession & {
   messages: ChatMessage[];
 };
 
+export type ChatQuota = {
+  limit: number;
+  used: number;
+  remaining: number;
+  available: boolean;
+};
+
+export type ChatSessionEvent = {
+  session_id: number;
+  user_message_id?: number;
+  intent?: string | null;
+};
+
 export type KnowledgeDocument = {
   id: number;
   name: string;
@@ -48,8 +70,9 @@ export type KnowledgeDocument = {
 type StreamChatOptions = {
   question: string;
   sessionId?: number | null;
-  onSession?: (sessionId: number) => void;
+  onSession?: (event: ChatSessionEvent) => void;
   onDelta: (text: string) => void;
+  onSources?: (sources: MessageSource[]) => void;
   onSaved?: (messageId: number) => void;
   onDone: () => void;
   onError?: (message: string) => void;
@@ -153,6 +176,10 @@ export function getSession(sessionId: number) {
   return getJson<ChatSessionDetail>(`/sessions/${sessionId}`);
 }
 
+export function getChatQuota() {
+  return getJson<ChatQuota>("/chat/quota");
+}
+
 export function deleteSession(sessionId: number) {
   return deleteJson(`/sessions/${sessionId}`);
 }
@@ -193,7 +220,18 @@ export async function streamChat(options: StreamChatOptions) {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || "Send failed");
+      let errorMessage = text || "消息发送失败";
+      try {
+        const data = JSON.parse(text);
+        if (Array.isArray(data.detail)) {
+          errorMessage = data.detail[0]?.msg || errorMessage;
+        } else if (typeof data.detail === "string") {
+          errorMessage = data.detail;
+        }
+      } catch {
+        // Keep original response text when the server does not return JSON.
+      }
+      throw new Error(normalizeErrorMessage(errorMessage));
     }
 
     const reader = response.body?.getReader();
@@ -219,11 +257,23 @@ export async function streamChat(options: StreamChatOptions) {
         const data = JSON.parse(dataLine.replace("data: ", ""));
 
         if (event === "session" && typeof data.session_id === "number") {
-          options.onSession?.(data.session_id);
+          options.onSession?.({
+            session_id: data.session_id,
+            user_message_id: typeof data.user_message_id === "number" ? data.user_message_id : undefined,
+            intent: typeof data.intent === "string" ? data.intent : undefined
+          });
         }
 
         if (event === "message" && data.type === "delta") {
           options.onDelta(data.content || "");
+        }
+
+        if (event === "source" && Array.isArray(data.items)) {
+          options.onSources?.(data.items);
+        }
+
+        if (event === "error") {
+          options.onError?.(data.message || "消息发送失败");
         }
 
         if (event === "saved" && typeof data.message_id === "number") {

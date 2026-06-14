@@ -12,6 +12,7 @@ httpx==0.28.1
 langchain==0.3.13
 langchain-community==0.3.13
 langchain-openai==0.2.14
+langchain-text-splitters==0.3.8
 langgraph==0.2.60
 PyMuPDF==1.25.1
 markdown==3.7

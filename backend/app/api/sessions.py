@@ -6,8 +6,15 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.chat import ChatMessage, ChatSession
 from app.models.feedback import Feedback
+from app.models.message_source import MessageSource
 from app.models.user import User
-from app.schemas.session import ChatMessageResponse, SessionCreateRequest, SessionDetail, SessionListResponse
+from app.schemas.session import (
+    ChatMessageResponse,
+    MessageSourceResponse,
+    SessionCreateRequest,
+    SessionDetail,
+    SessionListResponse,
+)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -54,6 +61,7 @@ def get_session(
 
     message_ids = [item.id for item in session.messages if item.role == "assistant"]
     feedback_by_message_id: dict[int, str] = {}
+    sources_by_message_id: dict[int, list[MessageSourceResponse]] = {}
     if message_ids:
         feedback_rows = db.scalars(
             select(Feedback)
@@ -62,6 +70,22 @@ def get_session(
         ).all()
         for item in feedback_rows:
             feedback_by_message_id.setdefault(item.message_id, item.rating)
+
+        source_rows = db.scalars(
+            select(MessageSource)
+            .where(MessageSource.message_id.in_(message_ids))
+            .order_by(MessageSource.message_id, MessageSource.id)
+        ).all()
+        for item in source_rows:
+            sources_by_message_id.setdefault(item.message_id, []).append(
+                MessageSourceResponse(
+                    doc_name=item.doc_name,
+                    document_id=item.document_id,
+                    chunk_id=item.chunk_id,
+                    score=float(item.score) if item.score is not None else None,
+                    summary=item.summary,
+                )
+            )
 
     return SessionDetail(
         id=session.id,
@@ -76,6 +100,7 @@ def get_session(
                 content=item.content,
                 intent=item.intent,
                 feedback=feedback_by_message_id.get(item.id),
+                sources=sources_by_message_id.get(item.id, []),
                 created_at=item.created_at,
             )
             for item in session.messages
@@ -95,6 +120,10 @@ def delete_session(
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
+    message_ids = db.scalars(select(ChatMessage.id).where(ChatMessage.session_id == session_id)).all()
+    if message_ids:
+        db.execute(delete(MessageSource).where(MessageSource.message_id.in_(message_ids)))
+        db.execute(delete(Feedback).where(Feedback.message_id.in_(message_ids)))
     db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
     db.delete(session)
     db.commit()

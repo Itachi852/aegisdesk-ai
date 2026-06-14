@@ -1,4 +1,5 @@
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http import models
 
 from app.core.config import settings
@@ -7,6 +8,7 @@ from app.services.sparse_service import build_sparse_vector
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
+PAYLOAD_INDEX_FIELDS = ("user_id", "document_id")
 
 
 def get_qdrant_client() -> QdrantClient:
@@ -20,6 +22,22 @@ def _collection_exists(client: QdrantClient) -> bool:
     collection_name = settings.qdrant_collection
     collections = client.get_collections().collections
     return any(collection.name == collection_name for collection in collections)
+
+
+def _ensure_payload_indexes(client: QdrantClient) -> None:
+    collection_name = settings.qdrant_collection
+    for field_name in PAYLOAD_INDEX_FIELDS:
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.INTEGER,
+                wait=True,
+            )
+        except UnexpectedResponse as exc:
+            message = str(exc)
+            if "already exists" not in message and "already" not in message.lower():
+                raise
 
 
 def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
@@ -44,6 +62,7 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
             raise RuntimeError(
                 "当前 Qdrant collection 缺少 sparse 向量配置。请新建 collection 或清空旧 collection 后重建索引。"
             )
+        _ensure_payload_indexes(client)
         return
 
     client.create_collection(
@@ -55,6 +74,7 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
             SPARSE_VECTOR_NAME: models.SparseVectorParams(),
         },
     )
+    _ensure_payload_indexes(client)
 
 
 def _user_filter(user_id: int | None) -> models.Filter | None:
@@ -99,12 +119,13 @@ def upsert_chunks(chunks: list[dict]) -> None:
     client.upsert(collection_name=settings.qdrant_collection, points=points)
 
 
-async def search_chunks(question: str, user_id: int | None = None):
+async def search_chunks(question: str, user_id: int | None = None, limit: int | None = None):
     dense_vector = embed_text(question)
     sparse_vector = build_sparse_vector(question)
     client = get_qdrant_client()
     _ensure_collection(client, len(dense_vector))
 
+    search_limit = limit or settings.rag_top_k
     query_filter = _user_filter(user_id)
     response = client.query_points(
         collection_name=settings.qdrant_collection,
@@ -113,30 +134,33 @@ async def search_chunks(question: str, user_id: int | None = None):
                 query=dense_vector,
                 using=DENSE_VECTOR_NAME,
                 filter=query_filter,
-                limit=settings.rag_top_k * 2,
+                limit=search_limit * 2,
             ),
             models.Prefetch(
                 query=sparse_vector,
                 using=SPARSE_VECTOR_NAME,
                 filter=query_filter,
-                limit=settings.rag_top_k * 2,
+                limit=search_limit * 2,
             ),
         ],
         query=models.FusionQuery(fusion=models.Fusion.RRF),
         query_filter=query_filter,
-        limit=settings.rag_top_k,
+        limit=search_limit,
         with_payload=True,
     )
 
     chunks = []
-    for item in response.points:
+    for rank, item in enumerate(response.points, start=1):
         payload = item.payload or {}
         chunks.append(
             {
+                "document_id": payload.get("document_id"),
+                "chunk_id": payload.get("chunk_id"),
                 "doc_name": payload.get("doc_name", "未知文档"),
                 "summary": payload.get("summary") or payload.get("content", "")[:120],
                 "content": payload.get("content", ""),
                 "score": round(item.score, 4),
+                "rank": rank,
             }
         )
     return chunks

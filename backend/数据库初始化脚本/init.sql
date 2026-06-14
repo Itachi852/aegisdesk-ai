@@ -51,6 +51,7 @@ CREATE TABLE message_sources (
   document_id BIGINT NOT NULL,
   chunk_id BIGINT NOT NULL,
   score DECIMAL(8, 6),
+  doc_name VARCHAR(255),
   summary VARCHAR(512)
 );
 
@@ -61,4 +62,16 @@ CREATE TABLE feedbacks (
   rating VARCHAR(16) NOT NULL,
   comment TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_daily_question_usages (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  usage_date DATE NOT NULL,
+  question_count INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_daily_question_usage (user_id, usage_date),
+  INDEX idx_user_daily_question_usages_user_id (user_id),
+  INDEX idx_user_daily_question_usages_usage_date (usage_date)
 );
