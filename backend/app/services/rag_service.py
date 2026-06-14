@@ -13,6 +13,7 @@ from app.prompts.qa_prompt import (
     build_qa_messages,
     build_query_rewrite_messages,
 )
+from app.services.chunk_context_service import expand_adjacent_chunks
 from app.services.intent_service import get_business_intent_keywords
 from app.services.llm_service import invoke_llm_text, stream_llm
 from app.services.rerank_service import rerank_chunks
@@ -141,20 +142,23 @@ def _filter_relevant_chunks(question: str, business_intent: str, chunks: list[di
     # 有 Rerank 分数时优先用模型相关性阈值，过滤掉弱相关引用。
     reranked_chunks = [item for item in chunks if item.get("rerank_score") is not None]
     if reranked_chunks:
-        return [
+        high_confidence_chunks = [
             item
             for item in reranked_chunks
             if float(item.get("rerank_score") or 0) >= settings.rag_score_threshold
         ][: settings.rag_top_k]
+        if high_confidence_chunks:
+            return high_confidence_chunks
 
     intent_keywords = get_business_intent_keywords(business_intent)
     if not intent_keywords:
-        return chunks[: settings.rag_top_k]
+        return reranked_chunks[: settings.rag_top_k] if reranked_chunks else chunks[: settings.rag_top_k]
 
-    # Rerank 不可用时，用业务意图关键词做一层保守过滤，减少无关文件被引用。
+    # Rerank 分数偏低或不可用时，用业务意图关键词做一层保守过滤，减少无关文件被引用。
+    fallback_chunks = reranked_chunks or chunks
     relevant_chunks = [
         item
-        for item in chunks
+        for item in fallback_chunks
         if any(keyword in item.get("content", "") or keyword in item.get("summary", "") for keyword in intent_keywords)
     ]
     if relevant_chunks:
@@ -261,7 +265,7 @@ async def multi_retrieve(state: RagState) -> dict[str, Any]:
     candidates: list[dict] = []
     try:
         for query in state.get("queries", []) or [state.get("question", "")]:
-            results = await search_chunks(query, user_id=user_id, limit=settings.rag_recall_per_query)
+            results = await search_chunks(query, limit=settings.rag_recall_per_query)
             for item in results:
                 candidate = dict(item)
                 candidate["query"] = query
@@ -306,10 +310,12 @@ async def rerank_results(state: RagState) -> dict[str, Any]:
     try:
         # Rerank 是最后一道精排；失败时退回 RRF 结果，保证用户仍能得到回答。
         chunks = rerank_chunks(question, fused_chunks, top_n=settings.rag_top_k)
-        return {"chunks": _filter_relevant_chunks(question, business_intent, chunks)}
+        filtered_chunks = _filter_relevant_chunks(question, business_intent, chunks)
+        return {"chunks": expand_adjacent_chunks(filtered_chunks)}
     except Exception:
         logger.exception("Rerank 节点失败，使用 RRF 结果。")
-        return {"chunks": _filter_relevant_chunks(question, business_intent, fused_chunks)}
+        filtered_chunks = _filter_relevant_chunks(question, business_intent, fused_chunks)
+        return {"chunks": expand_adjacent_chunks(filtered_chunks)}
 
 
 async def build_answer_messages(state: RagState) -> dict[str, Any]:

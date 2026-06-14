@@ -1,4 +1,4 @@
-import { Button, Empty, Popconfirm, Table, Upload, message } from "antd";
+import { Button, Empty, Popconfirm, Table, Tag, Upload, message } from "antd";
 import type { UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import {
@@ -25,9 +25,30 @@ const TEXT = {
   name: "文档名称",
   type: "类型",
   status: "状态",
+  processing: "处理中",
+  ready: "就绪",
+  failed: "失败",
   uploadTime: "上传时间",
   action: "操作"
 };
+
+function getFileType(fileName: string) {
+  const suffix = fileName.split(".").pop();
+  return suffix ? suffix.toLowerCase() : "";
+}
+
+function renderStatus(status: string) {
+  if (status === TEXT.processing) {
+    return <Tag color="processing">{TEXT.processing}</Tag>;
+  }
+  if (status === TEXT.ready) {
+    return <Tag color="success">{TEXT.ready}</Tag>;
+  }
+  if (status === TEXT.failed) {
+    return <Tag color="error">{TEXT.failed}</Tag>;
+  }
+  return status;
+}
 
 export function Knowledge() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -53,12 +74,40 @@ export function Knowledge() {
     accept: ".txt,.md",
     showUploadList: false,
     beforeUpload: async (file) => {
+      const tempId = -Date.now();
+      const pendingDocument: KnowledgeDocument = {
+        id: tempId,
+        name: file.name,
+        file_type: getFileType(file.name),
+        status: TEXT.processing,
+        error_message: null,
+        chunk_count: 0,
+        created_at: new Date().toISOString()
+      };
+
+      setDocuments((items) => [pendingDocument, ...items]);
       setUploading(true);
       try {
-        await uploadKnowledgeDocument(file);
-        message.success(TEXT.uploadSuccess);
+        const result = await uploadKnowledgeDocument(file);
+        setDocuments((items) => items.map((item) => (item.id === tempId ? result : item)));
+        if (result.status === TEXT.failed) {
+          message.error(result.error_message || TEXT.uploadFailed);
+        } else {
+          message.success(TEXT.uploadSuccess);
+        }
         await loadDocuments();
       } catch (error) {
+        setDocuments((items) =>
+          items.map((item) =>
+            item.id === tempId
+              ? {
+                  ...item,
+                  status: TEXT.failed,
+                  error_message: error instanceof Error ? error.message : TEXT.uploadFailed
+                }
+              : item
+          )
+        );
         message.error(error instanceof Error ? error.message : TEXT.uploadFailed);
       } finally {
         setUploading(false);
@@ -68,6 +117,11 @@ export function Knowledge() {
   };
 
   const removeDocument = async (documentId: number) => {
+    if (documentId < 0) {
+      setDocuments((items) => items.filter((item) => item.id !== documentId));
+      return;
+    }
+
     try {
       await deleteKnowledgeDocument(documentId);
       message.success(TEXT.deleteSuccess);
@@ -100,7 +154,7 @@ export function Knowledge() {
         columns={[
           { title: TEXT.name, dataIndex: "name" },
           { title: TEXT.type, dataIndex: "file_type", width: 90 },
-          { title: TEXT.status, dataIndex: "status", width: 100 },
+          { title: TEXT.status, dataIndex: "status", width: 100, render: renderStatus },
           { title: "Chunks", dataIndex: "chunk_count", width: 100 },
           {
             title: TEXT.uploadTime,
@@ -111,19 +165,20 @@ export function Knowledge() {
           {
             title: TEXT.action,
             width: 100,
-            render: (_, record) => (
-              <Popconfirm
-                title={TEXT.deleteTitle}
-                description={TEXT.deleteDescription}
-                okText={TEXT.delete}
-                cancelText={TEXT.cancel}
-                onConfirm={() => removeDocument(record.id)}
-              >
-                <Button danger size="small" type="text">
-                  {TEXT.delete}
-                </Button>
-              </Popconfirm>
-            )
+            render: (_, record) =>
+              record.status === TEXT.processing ? null : (
+                <Popconfirm
+                  title={TEXT.deleteTitle}
+                  description={TEXT.deleteDescription}
+                  okText={TEXT.delete}
+                  cancelText={TEXT.cancel}
+                  onConfirm={() => removeDocument(record.id)}
+                >
+                  <Button danger size="small" type="text">
+                    {TEXT.delete}
+                  </Button>
+                </Popconfirm>
+              )
           }
         ]}
       />

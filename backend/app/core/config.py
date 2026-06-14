@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     embedding_base_url: str = ""
     embedding_api_key: str = ""
     embedding_model: str = "text-embedding-3-small"
+    embedding_batch_size: int = 10
 
     rerank_url: str = ""
     rerank_api_key: str = ""
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     rag_rrf_top_k: int = 20
     rag_rrf_k: int = 60
     rag_score_threshold: float = 0.5
+    rag_adjacent_chunk_window: int = 1
 
     @computed_field
     @property

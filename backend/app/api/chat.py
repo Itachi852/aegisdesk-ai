@@ -119,6 +119,7 @@ def _ensure_daily_question_quota(db: Session, user_id: int) -> None:
         return
 
     # 额度统计独立于聊天消息，用户删除会话后也不能绕过每日提问上限。
+    usage_date = datetime.now().date()
     usage = _get_daily_usage(db, user_id, for_update=True)
     used_count = usage.question_count if usage else 0
     if used_count >= settings.daily_question_limit:

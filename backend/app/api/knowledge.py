@@ -49,14 +49,14 @@ def _document_response(document: KnowledgeDocument, chunk_count: int = 0) -> Kno
 @router.post("/documents", response_model=KnowledgeDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     上传知识库文档，并完成解析、切片、入库和向量写入。
 
     :param file: 用户上传的文档文件。
-    :param current_user: 当前登录用户。
+    :param _current_user: 当前登录用户，仅用于鉴权。
     :param db: 数据库会话。
     :return: 文档处理结果。
     """
@@ -71,7 +71,6 @@ async def upload_document(
 
     # 先落一条处理中记录，前端可以立即看到上传任务状态。
     document = KnowledgeDocument(
-        user_id=current_user.id,
         name=file.filename or saved_path.name,
         file_type=suffix.lstrip("."),
         status="处理中",
@@ -107,7 +106,6 @@ async def upload_document(
             [
                 {
                     "id": chunk.id,
-                    "user_id": current_user.id,
                     "document_id": document.id,
                     "doc_name": document.name,
                     "content": chunk.content,
@@ -125,20 +123,18 @@ async def upload_document(
         return _document_response(document, len(chunks))
     except Exception as exc:
         logger.exception(
-            "知识库文档处理失败，document_id=%s, user_id=%s, filename=%s",
+            "知识库文档处理失败，document_id=%s, filename=%s",
             document.id,
-            current_user.id,
             file.filename,
         )
         db.rollback()
         try:
             # 如果 Qdrant 已写入但后续步骤失败，按 document_id 清理残留向量。
-            delete_document_vectors(document.id, current_user.id)
+            delete_document_vectors(document.id)
         except Exception:
             logger.exception(
-                "知识库文档处理失败后清理 Qdrant 向量失败，document_id=%s, user_id=%s",
+                "知识库文档处理失败后清理 Qdrant 向量失败，document_id=%s",
                 document.id,
-                current_user.id,
             )
         document = db.get(KnowledgeDocument, document.id)
         # 失败只保留 document 记录和错误信息，不保留不完整的 chunk 数据。
@@ -152,21 +148,17 @@ async def upload_document(
 
 @router.get("/documents", response_model=KnowledgeDocumentListResponse)
 def list_documents(
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    获取当前用户的知识库文档列表。
+    获取企业共享知识库文档列表。
 
-    :param current_user: 当前登录用户。
+    :param _current_user: 当前登录用户，仅用于鉴权。
     :param db: 数据库会话。
     :return: 文档列表响应。
     """
-    documents = db.scalars(
-        select(KnowledgeDocument)
-        .where(KnowledgeDocument.user_id == current_user.id)
-        .order_by(KnowledgeDocument.created_at.desc())
-    ).all()
+    documents = db.scalars(select(KnowledgeDocument).order_by(KnowledgeDocument.created_at.desc())).all()
     counts = dict(
         db.execute(
             select(KnowledgeChunk.document_id, func.count(KnowledgeChunk.id))
@@ -181,23 +173,18 @@ def list_documents(
 @router.get("/documents/{document_id}", response_model=KnowledgeDocumentDetail)
 def get_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     获取指定知识库文档详情和切片列表。
 
     :param document_id: 文档 ID。
-    :param current_user: 当前登录用户。
+    :param _current_user: 当前登录用户，仅用于鉴权。
     :param db: 数据库会话。
     :return: 文档详情响应。
     """
-    document = db.scalar(
-        select(KnowledgeDocument).where(
-            KnowledgeDocument.id == document_id,
-            KnowledgeDocument.user_id == current_user.id,
-        )
-    )
+    document = db.scalar(select(KnowledgeDocument).where(KnowledgeDocument.id == document_id))
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
 
@@ -214,28 +201,23 @@ def get_document(
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     删除指定知识库文档及其切片和向量数据。
 
     :param document_id: 文档 ID。
-    :param current_user: 当前登录用户。
+    :param _current_user: 当前登录用户，仅用于鉴权。
     :param db: 数据库会话。
     :return: None。
     """
-    document = db.scalar(
-        select(KnowledgeDocument).where(
-            KnowledgeDocument.id == document_id,
-            KnowledgeDocument.user_id == current_user.id,
-        )
-    )
+    document = db.scalar(select(KnowledgeDocument).where(KnowledgeDocument.id == document_id))
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
 
     # 删除文档时先删向量，再删 MySQL chunk，避免知识库检索命中已经删除的文档。
-    delete_document_vectors(document_id, current_user.id)
+    delete_document_vectors(document_id)
     db.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id))
     db.delete(document)
     db.commit()

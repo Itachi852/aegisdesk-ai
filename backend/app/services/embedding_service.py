@@ -4,6 +4,8 @@ from langchain_openai import OpenAIEmbeddings
 
 from app.core.config import settings
 
+DEFAULT_EMBEDDING_BATCH_SIZE = 10
+
 
 def _embeddings_url() -> str:
     """
@@ -86,6 +88,12 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         raise RuntimeError("Embedding API Key 未配置，请在 .env 中填写 EMBEDDING_API_KEY 或 LLM_API_KEY。")
 
     try:
-        return get_embeddings_model().embed_documents(texts)
+        vectors: list[list[float]] = []
+        batch_size = settings.embedding_batch_size if settings.embedding_batch_size > 0 else DEFAULT_EMBEDDING_BATCH_SIZE
+        model = get_embeddings_model()
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            vectors.extend(model.embed_documents(batch))
+        return vectors
     except Exception as exc:
         raise _normalize_embedding_error(exc) from exc

@@ -8,7 +8,7 @@ from app.services.sparse_service import build_sparse_vector
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
-PAYLOAD_INDEX_FIELDS = ("user_id", "document_id")
+PAYLOAD_INDEX_FIELDS = ("document_id",)
 
 
 def get_qdrant_client() -> QdrantClient:
@@ -45,7 +45,7 @@ def _ensure_payload_indexes(client: QdrantClient) -> None:
     collection_name = settings.qdrant_collection
     for field_name in PAYLOAD_INDEX_FIELDS:
         try:
-            # user_id/document_id 会作为过滤条件，云端 Qdrant 需要显式 payload index。
+            # document_id 会作为删除过滤条件，云端 Qdrant 需要显式 payload index。
             client.create_payload_index(
                 collection_name=collection_name,
                 field_name=field_name,
@@ -104,26 +104,6 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
     _ensure_payload_indexes(client)
 
 
-def _user_filter(user_id: int | None) -> models.Filter | None:
-    """
-    构建按用户隔离知识库数据的 Qdrant 过滤条件。
-
-    :param user_id: 用户 ID。
-    :return: Qdrant Filter，不需要过滤时返回 None。
-    """
-    if user_id is None:
-        return None
-    # 每个用户只检索自己的知识库数据，避免多用户数据串读。
-    return models.Filter(
-        must=[
-            models.FieldCondition(
-                key="user_id",
-                match=models.MatchValue(value=user_id),
-            )
-        ]
-    )
-
-
 def upsert_chunks(chunks: list[dict]) -> None:
     """
     将知识库切片写入 Qdrant 向量库。
@@ -147,7 +127,6 @@ def upsert_chunks(chunks: list[dict]) -> None:
                 SPARSE_VECTOR_NAME: build_sparse_vector(item["content"]),
             },
             payload={
-                "user_id": item["user_id"],
                 "chunk_id": item["id"],
                 "document_id": item["document_id"],
                 "doc_name": item["doc_name"],
@@ -160,12 +139,11 @@ def upsert_chunks(chunks: list[dict]) -> None:
     client.upsert(collection_name=settings.qdrant_collection, points=points)
 
 
-async def search_chunks(question: str, user_id: int | None = None, limit: int | None = None):
+async def search_chunks(question: str, limit: int | None = None):
     """
     使用 dense + sparse hybrid 检索知识库切片。
 
     :param question: 用户问题。
-    :param user_id: 用户 ID，用于数据隔离。
     :param limit: 最大返回数量。
     :return: 命中的知识片段列表。
     """
@@ -175,7 +153,6 @@ async def search_chunks(question: str, user_id: int | None = None, limit: int | 
     _ensure_collection(client, len(dense_vector))
 
     search_limit = limit or settings.rag_top_k
-    query_filter = _user_filter(user_id)
     # Qdrant 原生 hybrid：dense/sparse 各自 prefetch，再用 RRF 融合成最终排序。
     response = client.query_points(
         collection_name=settings.qdrant_collection,
@@ -183,18 +160,15 @@ async def search_chunks(question: str, user_id: int | None = None, limit: int | 
             models.Prefetch(
                 query=dense_vector,
                 using=DENSE_VECTOR_NAME,
-                filter=query_filter,
                 limit=search_limit * 2,
             ),
             models.Prefetch(
                 query=sparse_vector,
                 using=SPARSE_VECTOR_NAME,
-                filter=query_filter,
                 limit=search_limit * 2,
             ),
         ],
         query=models.FusionQuery(fusion=models.Fusion.RRF),
-        query_filter=query_filter,
         limit=search_limit,
         with_payload=True,
     )
@@ -216,32 +190,24 @@ async def search_chunks(question: str, user_id: int | None = None, limit: int | 
     return chunks
 
 
-def delete_document_vectors(document_id: int, user_id: int | None = None) -> None:
+def delete_document_vectors(document_id: int) -> None:
     """
     删除指定文档在 Qdrant 中的向量数据。
 
     :param document_id: 文档 ID。
-    :param user_id: 用户 ID，用于防止误删其他用户数据。
     :return: None。
     """
     client = get_qdrant_client()
     if not _collection_exists(client):
         return
 
-    # 删除向量时同时限定 document_id 和 user_id，防止误删其他用户同 ID 文档。
+    # 企业知识库按 document_id 删除对应向量。
     must = [
         models.FieldCondition(
             key="document_id",
             match=models.MatchValue(value=document_id),
         )
     ]
-    if user_id is not None:
-        must.append(
-            models.FieldCondition(
-                key="user_id",
-                match=models.MatchValue(value=user_id),
-            )
-        )
 
     client.delete(
         collection_name=settings.qdrant_collection,
