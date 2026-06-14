@@ -18,6 +18,14 @@ def submit_feedback(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    提交或更新用户对 AI 回复的反馈。
+
+    :param payload: 反馈请求参数。
+    :param current_user: 当前登录用户。
+    :param db: 数据库会话。
+    :return: 反馈记录响应。
+    """
     message = db.scalar(
         select(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.session_id)
@@ -30,6 +38,7 @@ def submit_feedback(
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI message not found")
 
+    # 同一用户对同一条 AI 消息只保留一条反馈，重复点赞/点踩会更新原记录。
     feedback = db.scalar(
         select(Feedback)
         .where(Feedback.message_id == payload.message_id, Feedback.user_id == current_user.id)

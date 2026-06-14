@@ -8,6 +8,11 @@ LOG_FILE = LOG_DIR / "app.log"
 
 
 def setup_logging() -> None:
+    """
+    初始化后端日志配置。
+
+    :return: None。
+    """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     root_logger = logging.getLogger()

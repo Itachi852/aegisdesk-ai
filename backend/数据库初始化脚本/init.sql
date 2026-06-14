@@ -50,7 +50,7 @@ CREATE TABLE message_sources (
   message_id BIGINT NOT NULL,
   document_id BIGINT NOT NULL,
   chunk_id BIGINT NOT NULL,
-  score DECIMAL(8, 6),
+  score DECIMAL(10, 6),
   doc_name VARCHAR(255),
   summary VARCHAR(512)
 );

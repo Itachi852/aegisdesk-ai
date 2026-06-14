@@ -25,6 +25,14 @@ def create_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    创建一个新的聊天会话。
+
+    :param payload: 会话创建请求。
+    :param current_user: 当前登录用户。
+    :param db: 数据库会话。
+    :return: 新创建的会话详情。
+    """
     session = ChatSession(user_id=current_user.id, title=payload.title or "新建对话")
     db.add(session)
     db.commit()
@@ -37,6 +45,13 @@ def list_sessions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    获取当前用户的历史会话列表。
+
+    :param current_user: 当前登录用户。
+    :param db: 数据库会话。
+    :return: 会话列表响应。
+    """
     sessions = db.scalars(
         select(ChatSession)
         .where(ChatSession.user_id == current_user.id)
@@ -51,6 +66,14 @@ def get_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    获取指定会话的消息、反馈和引用来源。
+
+    :param session_id: 会话 ID。
+    :param current_user: 当前登录用户。
+    :param db: 数据库会话。
+    :return: 会话详情响应。
+    """
     session = db.scalar(
         select(ChatSession)
         .options(selectinload(ChatSession.messages))
@@ -63,6 +86,7 @@ def get_session(
     feedback_by_message_id: dict[int, str] = {}
     sources_by_message_id: dict[int, list[MessageSourceResponse]] = {}
     if message_ids:
+        # 反馈只针对 AI 消息，历史会话加载时按 message_id 合并回消息列表。
         feedback_rows = db.scalars(
             select(Feedback)
             .where(Feedback.user_id == current_user.id, Feedback.message_id.in_(message_ids))
@@ -71,6 +95,7 @@ def get_session(
         for item in feedback_rows:
             feedback_by_message_id.setdefault(item.message_id, item.rating)
 
+        # 引用来源按 chunk 存多条，前端展示时再按 document_id 去重。
         source_rows = db.scalars(
             select(MessageSource)
             .where(MessageSource.message_id.in_(message_ids))
@@ -114,6 +139,14 @@ def delete_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    删除指定聊天会话及其关联消息、反馈和引用来源。
+
+    :param session_id: 会话 ID。
+    :param current_user: 当前登录用户。
+    :param db: 数据库会话。
+    :return: None。
+    """
     session = db.scalar(
         select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == current_user.id)
     )
@@ -122,6 +155,7 @@ def delete_session(
 
     message_ids = db.scalars(select(ChatMessage.id).where(ChatMessage.session_id == session_id)).all()
     if message_ids:
+        # 先删依赖消息的引用和反馈，再删消息和会话，避免外键残留。
         db.execute(delete(MessageSource).where(MessageSource.message_id.in_(message_ids)))
         db.execute(delete(Feedback).where(Feedback.message_id.in_(message_ids)))
     db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))

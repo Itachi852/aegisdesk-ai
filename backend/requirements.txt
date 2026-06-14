@@ -6,7 +6,6 @@ pydantic-settings==2.7.1
 python-jose[cryptography]==3.3.0
 passlib==1.7.4
 python-multipart==0.0.20
-redis==5.2.1
 qdrant-client==1.12.1
 httpx==0.28.1
 langchain==0.3.13

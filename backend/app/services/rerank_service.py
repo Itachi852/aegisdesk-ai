@@ -8,16 +8,30 @@ logger = logging.getLogger(__name__)
 
 
 def _is_placeholder_api_key() -> bool:
+    """
+    判断当前 Rerank API Key 是否仍是占位配置。
+
+    :return: 是占位配置时返回 True。
+    """
     api_key = settings.resolved_rerank_api_key
     return not api_key or api_key in {"replace-with-your-api-key", "replace-with-your-bailian-api-key"}
 
 
 def rerank_chunks(question: str, chunks: list[dict], top_n: int | None = None) -> list[dict]:
+    """
+    调用 Rerank 服务对候选知识片段重新排序。
+
+    :param question: 用户问题。
+    :param chunks: 候选知识片段列表。
+    :param top_n: 返回的最大片段数量。
+    :return: 重排后的知识片段列表。
+    """
     if not chunks:
         return []
 
     final_top_n = top_n or settings.rag_top_k
     if _is_placeholder_api_key():
+        # Rerank 不是强依赖；未配置时直接沿用 RRF 排序，保证 RAG 链路可用。
         logger.warning("Rerank API Key 未配置，跳过 rerank，使用 RRF 排序结果。")
         return chunks[:final_top_n]
 
@@ -42,6 +56,7 @@ def rerank_chunks(question: str, chunks: list[dict], top_n: int | None = None) -
             response = client.post(settings.rerank_url, headers=headers, json=payload)
             response.raise_for_status()
     except Exception:
+        # 外部重排服务失败时不阻断回答，只降级为召回阶段的排序。
         logger.exception("Rerank 调用失败，使用 RRF 排序结果。")
         return chunks[:final_top_n]
 

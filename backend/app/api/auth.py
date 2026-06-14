@@ -14,6 +14,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    """
+    注册新用户并返回登录令牌。
+
+    :param payload: 注册请求参数。
+    :param db: 数据库会话。
+    :return: 访问令牌和用户信息。
+    """
     conditions = []
     if payload.email:
         conditions.append(User.email == payload.email)
@@ -42,6 +49,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    """
+    校验账号密码并返回登录令牌。
+
+    :param payload: 登录请求参数。
+    :param db: 数据库会话。
+    :return: 访问令牌和用户信息。
+    """
     account = payload.account.strip().lower()
     user = db.scalar(select(User).where(or_(User.email == account, User.phone == account)))
 
@@ -57,4 +71,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
+    """
+    获取当前登录用户信息。
+
+    :param current_user: 当前登录用户。
+    :return: 当前用户信息。
+    """
     return current_user

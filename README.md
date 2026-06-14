@@ -212,12 +212,6 @@ RAG_RRF_K=60
 RAG_SCORE_THRESHOLD=0.5
 ```
 
-说明：
-
-- `.env.example` 用于提交到仓库，说明需要哪些配置。
-- `.env` 是本地真实配置，可能包含数据库密码和 API Key，不应提交。
-- 如果 `.env` 未配置部分 RAG 参数，会使用 `backend/app/core/config.py` 中的默认值。
-
 ## 核心接口
 
 接口前缀：
@@ -228,19 +222,19 @@ RAG_SCORE_THRESHOLD=0.5
 
 常用接口：
 
-| 模块 | 方法 | 路径 | 说明 |
-|---|---|---|---|
-| 认证 | POST | `/auth/register` | 注册 |
-| 认证 | POST | `/auth/login` | 登录 |
-| 会话 | GET | `/sessions` | 会话列表 |
-| 会话 | GET | `/sessions/{session_id}` | 会话详情 |
-| 会话 | DELETE | `/sessions/{session_id}` | 删除会话 |
-| 聊天 | GET | `/chat/quota` | 查询今日提问额度 |
-| 聊天 | POST | `/chat/stream` | SSE 流式问答 |
-| 知识库 | POST | `/knowledge/documents` | 上传文档 |
-| 知识库 | GET | `/knowledge/documents` | 文档列表 |
-| 知识库 | DELETE | `/knowledge/documents/{document_id}` | 删除文档 |
-| 反馈 | POST | `/feedback` | 提交点赞/踩 |
+| 模块  | 方法     | 路径                                   | 说明       |
+| --- | ------ | ------------------------------------ | -------- |
+| 认证  | POST   | `/auth/register`                     | 注册       |
+| 认证  | POST   | `/auth/login`                        | 登录       |
+| 会话  | GET    | `/sessions`                          | 会话列表     |
+| 会话  | GET    | `/sessions/{session_id}`             | 会话详情     |
+| 会话  | DELETE | `/sessions/{session_id}`             | 删除会话     |
+| 聊天  | GET    | `/chat/quota`                        | 查询今日提问额度 |
+| 聊天  | POST   | `/chat/stream`                       | SSE 流式问答 |
+| 知识库 | POST   | `/knowledge/documents`               | 上传文档     |
+| 知识库 | GET    | `/knowledge/documents`               | 文档列表     |
+| 知识库 | DELETE | `/knowledge/documents/{document_id}` | 删除文档     |
+| 反馈  | POST   | `/feedback`                          | 提交点赞/踩   |
 
 完整说明见：
 
@@ -301,25 +295,7 @@ backend/logs/app.log
 
 LLM、Embedding、Qdrant、Rerank 等异常会写入日志。前端只展示用户友好的错误提示，避免直接暴露技术错误。
 
-## 文档同步约定
-
-如果后续项目有功能、接口、数据库、运行方式、AI 架构或业务流程变更，需要同步更新以下文件：
-
-- [项目说明.md](项目说明.md)
-- [运行指南.md](运行指南.md)
-- [docs/API文档.md](docs/API文档.md)
-- [docs/数据库设计.md](docs/数据库设计.md)
-- [docs/AI架构设计.md](docs/AI架构设计.md)
-- [docs/业务流程说明.md](docs/业务流程说明.md)
-
-这个约定用于保证代码和交付文档一致，方便评审者直接从仓库理解项目。
-
-## 当前待完善项
-
-- PDF 文档上传解析需要补齐到前后端完整支持。
-- 建议补充企业客服示例知识库，如产品介绍、FAQ、退换货政策。
-- 管理后台统计接口目前是基础占位，可继续完善日均问答量和反馈统计。
-- 可扩展回答后的追问建议功能。
+# 
 
 ## 更多文档
 
@@ -329,4 +305,3 @@ LLM、Embedding、Qdrant、Rerank 等异常会写入日志。前端只展示用�
 - [docs/数据库设计.md](docs/数据库设计.md)
 - [docs/AI架构设计.md](docs/AI架构设计.md)
 - [docs/业务流程说明.md](docs/业务流程说明.md)
-

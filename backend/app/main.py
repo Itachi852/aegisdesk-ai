@@ -27,4 +27,9 @@ app.include_router(admin.router, prefix=settings.api_prefix)
 
 @app.get("/health")
 def health_check():
+    """
+    后端健康检查接口。
+
+    :return: 服务运行状态。
+    """
     return {"status": "ok", "service": settings.app_name}

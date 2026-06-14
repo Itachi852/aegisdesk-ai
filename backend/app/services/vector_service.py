@@ -12,6 +12,11 @@ PAYLOAD_INDEX_FIELDS = ("user_id", "document_id")
 
 
 def get_qdrant_client() -> QdrantClient:
+    """
+    获取 Qdrant 客户端。
+
+    :return: QdrantClient 实例。
+    """
     return QdrantClient(
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key or None,
@@ -19,15 +24,28 @@ def get_qdrant_client() -> QdrantClient:
 
 
 def _collection_exists(client: QdrantClient) -> bool:
+    """
+    判断配置的 Qdrant collection 是否存在。
+
+    :param client: Qdrant 客户端。
+    :return: collection 存在时返回 True。
+    """
     collection_name = settings.qdrant_collection
     collections = client.get_collections().collections
     return any(collection.name == collection_name for collection in collections)
 
 
 def _ensure_payload_indexes(client: QdrantClient) -> None:
+    """
+    确保 Qdrant payload 过滤字段已创建索引。
+
+    :param client: Qdrant 客户端。
+    :return: None。
+    """
     collection_name = settings.qdrant_collection
     for field_name in PAYLOAD_INDEX_FIELDS:
         try:
+            # user_id/document_id 会作为过滤条件，云端 Qdrant 需要显式 payload index。
             client.create_payload_index(
                 collection_name=collection_name,
                 field_name=field_name,
@@ -41,8 +59,16 @@ def _ensure_payload_indexes(client: QdrantClient) -> None:
 
 
 def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
+    """
+    确保 Qdrant collection 存在且支持当前混合检索配置。
+
+    :param client: Qdrant 客户端。
+    :param vector_size: dense 向量维度。
+    :return: None。
+    """
     collection_name = settings.qdrant_collection
     if _collection_exists(client):
+        # 已存在的 collection 必须同时支持 dense 和 sparse，且 dense 维度与当前 embedding 一致。
         collection = client.get_collection(collection_name=collection_name)
         vectors_config = collection.config.params.vectors
         sparse_config = collection.config.params.sparse_vectors or {}
@@ -65,6 +91,7 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
         _ensure_payload_indexes(client)
         return
 
+    # 首次写入时按当前 embedding 维度自动创建支持 hybrid 检索的 collection。
     client.create_collection(
         collection_name=collection_name,
         vectors_config={
@@ -78,8 +105,15 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
 
 
 def _user_filter(user_id: int | None) -> models.Filter | None:
+    """
+    构建按用户隔离知识库数据的 Qdrant 过滤条件。
+
+    :param user_id: 用户 ID。
+    :return: Qdrant Filter，不需要过滤时返回 None。
+    """
     if user_id is None:
         return None
+    # 每个用户只检索自己的知识库数据，避免多用户数据串读。
     return models.Filter(
         must=[
             models.FieldCondition(
@@ -91,6 +125,12 @@ def _user_filter(user_id: int | None) -> models.Filter | None:
 
 
 def upsert_chunks(chunks: list[dict]) -> None:
+    """
+    将知识库切片写入 Qdrant 向量库。
+
+    :param chunks: 知识库切片字典列表。
+    :return: None。
+    """
     texts = [item["content"] for item in chunks]
     dense_vectors = embed_texts(texts)
     if not dense_vectors:
@@ -98,6 +138,7 @@ def upsert_chunks(chunks: list[dict]) -> None:
 
     client = get_qdrant_client()
     _ensure_collection(client, len(dense_vectors[0]))
+    # 同一个 point 同时写 dense 向量和 sparse 向量，后续可做语义+关键词混合召回。
     points = [
         models.PointStruct(
             id=item["id"],
@@ -120,6 +161,14 @@ def upsert_chunks(chunks: list[dict]) -> None:
 
 
 async def search_chunks(question: str, user_id: int | None = None, limit: int | None = None):
+    """
+    使用 dense + sparse hybrid 检索知识库切片。
+
+    :param question: 用户问题。
+    :param user_id: 用户 ID，用于数据隔离。
+    :param limit: 最大返回数量。
+    :return: 命中的知识片段列表。
+    """
     dense_vector = embed_text(question)
     sparse_vector = build_sparse_vector(question)
     client = get_qdrant_client()
@@ -127,6 +176,7 @@ async def search_chunks(question: str, user_id: int | None = None, limit: int | 
 
     search_limit = limit or settings.rag_top_k
     query_filter = _user_filter(user_id)
+    # Qdrant 原生 hybrid：dense/sparse 各自 prefetch，再用 RRF 融合成最终排序。
     response = client.query_points(
         collection_name=settings.qdrant_collection,
         prefetch=[
@@ -167,10 +217,18 @@ async def search_chunks(question: str, user_id: int | None = None, limit: int | 
 
 
 def delete_document_vectors(document_id: int, user_id: int | None = None) -> None:
+    """
+    删除指定文档在 Qdrant 中的向量数据。
+
+    :param document_id: 文档 ID。
+    :param user_id: 用户 ID，用于防止误删其他用户数据。
+    :return: None。
+    """
     client = get_qdrant_client()
     if not _collection_exists(client):
         return
 
+    # 删除向量时同时限定 document_id 和 user_id，防止误删其他用户同 ID 文档。
     must = [
         models.FieldCondition(
             key="document_id",

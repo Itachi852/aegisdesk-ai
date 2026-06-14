@@ -14,6 +14,11 @@ class RegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_account(self):
+        """
+        校验注册账号必须包含合法邮箱或手机号。
+
+        :return: 校验后的注册请求对象。
+        """
         if self.email:
             self.email = self.email.strip().lower()
         if self.phone:

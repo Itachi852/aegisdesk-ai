@@ -134,20 +134,47 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def _format_history(history: list[dict]) -> str:
+    """
+    格式化最近对话历史。
+
+    :param history: 历史消息列表。
+    :return: 可放入提示词的历史文本。
+    """
     return "\n".join(f"{item.get('role')}: {item.get('content')}" for item in history[-6:]) or "无"
 
 
 def _format_knowledge(chunks: list[dict]) -> str:
+    """
+    格式化知识库召回片段。
+
+    :param chunks: 知识片段列表。
+    :return: 可放入提示词的知识库文本。
+    """
     return "\n\n".join(
         f"[来源: {item['doc_name']} | 相关度: {item['score']}]\n{item['content']}" for item in chunks
     )
 
 
 def build_intent_messages(question: str, history: list[dict]) -> list[BaseMessage]:
+    """
+    构建 RAG 路由意图识别消息。
+
+    :param question: 用户问题。
+    :param history: 最近对话历史。
+    :return: LangChain 消息列表。
+    """
     return INTENT_PROMPT.format_messages(question=question, history=_format_history(history))
 
 
 def build_query_rewrite_messages(question: str, history: list[dict], max_queries: int) -> list[BaseMessage]:
+    """
+    构建问题改写提示词消息。
+
+    :param question: 用户原始问题。
+    :param history: 最近对话历史。
+    :param max_queries: 最多生成的改写问题数量。
+    :return: LangChain 消息列表。
+    """
     return QUERY_REWRITE_PROMPT.format_messages(
         question=question,
         history=_format_history(history),
@@ -156,6 +183,14 @@ def build_query_rewrite_messages(question: str, history: list[dict], max_queries
 
 
 def build_qa_messages(question: str, chunks: list[dict], history: list[dict]) -> list[BaseMessage]:
+    """
+    构建带知识库上下文的问答提示词消息。
+
+    :param question: 用户问题。
+    :param chunks: 命中的知识片段。
+    :param history: 最近对话历史。
+    :return: LangChain 消息列表。
+    """
     return QA_PROMPT.format_messages(
         question=question,
         knowledge=_format_knowledge(chunks),
@@ -164,8 +199,22 @@ def build_qa_messages(question: str, chunks: list[dict], history: list[dict]) ->
 
 
 def build_no_knowledge_messages(question: str, history: list[dict]) -> list[BaseMessage]:
+    """
+    构建未命中知识库时的兜底回答提示词消息。
+
+    :param question: 用户问题。
+    :param history: 最近对话历史。
+    :return: LangChain 消息列表。
+    """
     return NO_KNOWLEDGE_PROMPT.format_messages(question=question, history=_format_history(history))
 
 
 def build_chat_messages(question: str, history: list[dict]) -> list[BaseMessage]:
+    """
+    构建普通闲聊回答提示词消息。
+
+    :param question: 用户问题。
+    :param history: 最近对话历史。
+    :return: LangChain 消息列表。
+    """
     return CHAT_PROMPT.format_messages(question=question, history=_format_history(history))
