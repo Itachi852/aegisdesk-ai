@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     jwt_secret_key: str = "replace-this-in-production"
     access_token_expire_minutes: int = 60 * 24
-    bootstrap_on_startup: bool = False
+    bootstrap_on_startup: bool = True
 
     mysql_host: str = "localhost"
     mysql_port: int = 3306
