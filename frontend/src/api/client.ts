@@ -57,10 +57,16 @@ export type ChatSessionEvent = {
   intent?: string | null;
 };
 
+export type ChatProgressEvent = {
+  stage: string;
+  message: string;
+};
+
 export type KnowledgeDocument = {
   id: number;
   name: string;
   file_type: string;
+  file_hash?: string | null;
   status: string;
   error_message?: string | null;
   chunk_count: number;
@@ -71,6 +77,7 @@ type StreamChatOptions = {
   question: string;
   sessionId?: number | null;
   onSession?: (event: ChatSessionEvent) => void;
+  onProgress?: (event: ChatProgressEvent) => void;
   onDelta: (text: string) => void;
   onSources?: (sources: MessageSource[]) => void;
   onSaved?: (messageId: number) => void;
@@ -266,6 +273,13 @@ export async function streamChat(options: StreamChatOptions) {
 
         if (event === "message" && data.type === "delta") {
           options.onDelta(data.content || "");
+        }
+
+        if (event === "progress" && typeof data.message === "string") {
+          options.onProgress?.({
+            stage: typeof data.stage === "string" ? data.stage : "unknown",
+            message: data.message
+          });
         }
 
         if (event === "source" && Array.isArray(data.items)) {

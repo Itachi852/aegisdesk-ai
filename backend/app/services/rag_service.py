@@ -127,6 +127,68 @@ def _rrf_fuse(candidates: list[dict]) -> list[dict]:
     return fused[: settings.rag_rrf_top_k]
 
 
+def _truncate_log_text(value: Any, max_length: int = 120) -> str:
+    """
+    截断日志中的长文本字段，避免调试日志过大。
+
+    :param value: 原始字段值。
+    :param max_length: 最大保留长度。
+    :return: 适合写入日志的短文本。
+    """
+    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
+    if len(text) <= max_length:
+        return text
+    return f"{text[:max_length]}..."
+
+
+def _log_rag_chunks(stage: str, state: RagState, chunks: list[dict]) -> None:
+    """
+    打印 RAG 某个阶段的候选 chunk 排名和分数。
+
+    :param stage: RAG 阶段名。
+    :param state: LangGraph 当前状态。
+    :param chunks: 当前阶段的 chunk 列表。
+    :return: None。
+    """
+    if not settings.rag_debug_log_enabled:
+        return
+
+    top_n = max(int(settings.rag_debug_log_top_n or 0), 0)
+    if top_n <= 0:
+        return
+
+    limited_chunks = chunks[:top_n]
+    logger.info(
+        "RAG调试汇总 stage=%s session_id=%s user_id=%s question=%s total=%s logged=%s",
+        stage,
+        state.get("session_id"),
+        state.get("user_id"),
+        _truncate_log_text(state.get("question"), 200),
+        len(chunks),
+        len(limited_chunks),
+    )
+    for index, item in enumerate(limited_chunks, start=1):
+        logger.info(
+            (
+                "RAG调试明细 stage=%s rank=%s query=%s document_id=%s chunk_id=%s "
+                "doc_name=%s score=%s rerank_score=%s expanded_from_chunk_id=%s "
+                "queries=%s query_ranks=%s summary=%s"
+            ),
+            stage,
+            item.get("rank") or index,
+            _truncate_log_text(item.get("query"), 120),
+            item.get("document_id"),
+            item.get("chunk_id"),
+            item.get("doc_name"),
+            item.get("score"),
+            item.get("rerank_score"),
+            item.get("expanded_from_chunk_id"),
+            item.get("queries"),
+            item.get("query_ranks"),
+            _truncate_log_text(item.get("summary"), 120),
+        )
+
+
 def _filter_relevant_chunks(question: str, business_intent: str, chunks: list[dict]) -> list[dict]:
     """
     过滤与当前问题弱相关的知识片段。
@@ -266,10 +328,13 @@ async def multi_retrieve(state: RagState) -> dict[str, Any]:
     try:
         for query in state.get("queries", []) or [state.get("question", "")]:
             results = await search_chunks(query, limit=settings.rag_recall_per_query)
+            query_candidates: list[dict] = []
             for item in results:
                 candidate = dict(item)
                 candidate["query"] = query
                 candidates.append(candidate)
+                query_candidates.append(candidate)
+            _log_rag_chunks("retrieve", state, query_candidates)
         return {"candidates": candidates}
     except Exception as exc:
         logger.exception(
@@ -291,7 +356,9 @@ async def rrf_fusion(state: RagState) -> dict[str, Any]:
     if state.get("error") or state.get("intent") == "general_chat":
         return {"fused_chunks": []}
     # 第一层 RRF 已在 Qdrant hybrid 内部完成，这里再融合多 query 的召回结果。
-    return {"fused_chunks": _rrf_fuse(state.get("candidates", []))}
+    fused_chunks = _rrf_fuse(state.get("candidates", []))
+    _log_rag_chunks("rrf", state, fused_chunks)
+    return {"fused_chunks": fused_chunks}
 
 
 async def rerank_results(state: RagState) -> dict[str, Any]:
@@ -310,12 +377,19 @@ async def rerank_results(state: RagState) -> dict[str, Any]:
     try:
         # Rerank 是最后一道精排；失败时退回 RRF 结果，保证用户仍能得到回答。
         chunks = rerank_chunks(question, fused_chunks, top_n=settings.rag_top_k)
+        _log_rag_chunks("rerank", state, chunks)
         filtered_chunks = _filter_relevant_chunks(question, business_intent, chunks)
-        return {"chunks": expand_adjacent_chunks(filtered_chunks)}
+        _log_rag_chunks("filtered", state, filtered_chunks)
+        expanded_chunks = expand_adjacent_chunks(filtered_chunks)
+        _log_rag_chunks("expanded", state, expanded_chunks)
+        return {"chunks": expanded_chunks}
     except Exception:
         logger.exception("Rerank 节点失败，使用 RRF 结果。")
         filtered_chunks = _filter_relevant_chunks(question, business_intent, fused_chunks)
-        return {"chunks": expand_adjacent_chunks(filtered_chunks)}
+        _log_rag_chunks("filtered", state, filtered_chunks)
+        expanded_chunks = expand_adjacent_chunks(filtered_chunks)
+        _log_rag_chunks("expanded", state, expanded_chunks)
+        return {"chunks": expanded_chunks}
 
 
 async def build_answer_messages(state: RagState) -> dict[str, Any]:
@@ -373,6 +447,17 @@ def build_rag_graph():
 rag_graph = build_rag_graph()
 
 
+def _progress_event(stage: str, message: str) -> dict:
+    """
+    构造前端展示用的 RAG 进度事件。
+
+    :param stage: 当前处理阶段标识。
+    :param message: 前端展示文案。
+    :return: SSE 事件结构。
+    """
+    return {"event": "progress", "data": {"stage": stage, "message": message}}
+
+
 async def rag_answer_stream(payload: dict):
     """
     执行 RAG 工作流并生成前端 SSE 事件。
@@ -380,16 +465,34 @@ async def rag_answer_stream(payload: dict):
     :param payload: 聊天请求上下文。
     :return: SSE 事件异步迭代器。
     """
-    # 先执行图得到最终 Prompt 和引用片段，再把大模型输出转换成 SSE 事件。
-    state = await rag_graph.ainvoke(
-        {
-            "session_id": payload.get("session_id"),
-            "user_id": payload.get("user_id"),
-            "question": payload.get("question") or "",
-            "history": payload.get("history", []),
-            "business_intent": payload.get("business_intent") or "other",
-        }
-    )
+    # 按节点逐步执行，方便在耗时阶段之间向前端推送可见进度。
+    state: RagState = {
+        "session_id": payload.get("session_id"),
+        "user_id": payload.get("user_id"),
+        "question": payload.get("question") or "",
+        "history": payload.get("history", []),
+        "business_intent": payload.get("business_intent") or "other",
+    }
+
+    yield _progress_event("preparing", "正在准备问题...")
+    state.update(await validate_question(state))
+
+    yield _progress_event("intent", "正在识别问题类型...")
+    state.update(await classify_intent(state))
+
+    if not state.get("error") and state.get("intent") != "general_chat":
+        yield _progress_event("rewrite", "正在改写检索问题...")
+        state.update(await rewrite_queries(state))
+
+        yield _progress_event("retrieve", "正在检索知识库...")
+        state.update(await multi_retrieve(state))
+        state.update(await rrf_fusion(state))
+
+        yield _progress_event("rerank", "正在筛选相关资料...")
+        state.update(await rerank_results(state))
+
+    yield _progress_event("generate", "正在生成回答...")
+    state.update(await build_answer_messages(state))
 
     if state.get("error"):
         content = state["error"] if state["error"].startswith("单次提问") else ANSWER_FAILED_MESSAGE

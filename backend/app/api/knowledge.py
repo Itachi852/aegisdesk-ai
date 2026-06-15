@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import delete, func, select
@@ -16,15 +15,16 @@ from app.schemas.knowledge import (
     KnowledgeDocumentListResponse,
     KnowledgeDocumentResponse,
 )
-from app.services.document_service import parse_document
-from app.services.vector_service import delete_document_vectors, upsert_chunks
-from app.utils.text_splitter import split_text
+from app.services.knowledge_import_service import (
+    DuplicateKnowledgeDocumentError,
+    KnowledgeDocumentProcessingError,
+    SUPPORTED_SUFFIXES,
+    import_knowledge_document,
+)
+from app.services.vector_service import delete_document_vectors
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 logger = logging.getLogger(__name__)
-
-UPLOAD_DIR = Path("uploads/knowledge")
-SUPPORTED_SUFFIXES = {".txt", ".md"}
 
 
 def _document_response(document: KnowledgeDocument, chunk_count: int = 0) -> KnowledgeDocumentResponse:
@@ -39,6 +39,7 @@ def _document_response(document: KnowledgeDocument, chunk_count: int = 0) -> Kno
         id=document.id,
         name=document.name,
         file_type=document.file_type,
+        file_hash=document.file_hash,
         status=document.status,
         error_message=document.error_message,
         chunk_count=chunk_count,
@@ -64,86 +65,19 @@ async def upload_document(
     if suffix not in SUPPORTED_SUFFIXES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅支持 .txt 和 .md 文件")
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    saved_path = UPLOAD_DIR / f"{uuid4().hex}{suffix}"
     content = await file.read()
-    saved_path.write_bytes(content)
-
-    # 先落一条处理中记录，前端可以立即看到上传任务状态。
-    document = KnowledgeDocument(
-        name=file.filename or saved_path.name,
-        file_type=suffix.lstrip("."),
-        status="处理中",
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-
     try:
-        text = parse_document(str(saved_path))
-        chunks = split_text(text)
-        if not chunks:
-            raise ValueError("文档内容为空")
-
-        chunk_models = [
-            KnowledgeChunk(
-                document_id=document.id,
-                vector_id="",
-                content=chunk,
-                summary=chunk[:120],
-            )
-            for chunk in chunks
-        ]
-        db.add_all(chunk_models)
-        db.flush()
-
-        # 先 flush 获取 MySQL chunk id，再复用它作为 Qdrant point id，便于后续按文档删除向量。
-        for chunk in chunk_models:
-            chunk.vector_id = str(chunk.id)
-
-        # MySQL chunk 和 Qdrant 向量需要保持一致；向量写入失败时会回滚本次 chunk 入库。
-        upsert_chunks(
-            [
-                {
-                    "id": chunk.id,
-                    "document_id": document.id,
-                    "doc_name": document.name,
-                    "content": chunk.content,
-                    "summary": chunk.summary,
-                }
-                for chunk in chunk_models
-            ]
+        document, chunk_count, _skipped = import_knowledge_document(
+            db,
+            filename=file.filename or "",
+            content=content,
+            fail_on_duplicate=True,
         )
-
-        document.status = "就绪"
-        document.error_message = None
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-        return _document_response(document, len(chunks))
-    except Exception as exc:
-        logger.exception(
-            "知识库文档处理失败，document_id=%s, filename=%s",
-            document.id,
-            file.filename,
-        )
-        db.rollback()
-        try:
-            # 如果 Qdrant 已写入但后续步骤失败，按 document_id 清理残留向量。
-            delete_document_vectors(document.id)
-        except Exception:
-            logger.exception(
-                "知识库文档处理失败后清理 Qdrant 向量失败，document_id=%s",
-                document.id,
-            )
-        document = db.get(KnowledgeDocument, document.id)
-        # 失败只保留 document 记录和错误信息，不保留不完整的 chunk 数据。
-        document.status = "失败"
-        document.error_message = str(exc)
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-        return _document_response(document, 0)
+        return _document_response(document, chunk_count)
+    except DuplicateKnowledgeDocumentError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="已存在相同内容的文档")
+    except KnowledgeDocumentProcessingError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="相同文档正在处理中")
 
 
 @router.get("/documents", response_model=KnowledgeDocumentListResponse)

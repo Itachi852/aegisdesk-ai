@@ -1,13 +1,35 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, chat, feedback, knowledge, sessions
 from app.core.config import settings
 from app.core.logger import setup_logging
+from app.services.bootstrap_service import bootstrap_project
 
 setup_logging()
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """
+    FastAPI 启动生命周期钩子。
+
+    :param _app: FastAPI 应用实例。
+    :return: 异步上下文管理器。
+    """
+    if settings.bootstrap_on_startup:
+        logger.info("BOOTSTRAP_ON_STARTUP=true，开始执行启动初始化。")
+        bootstrap_project()
+    else:
+        logger.info("BOOTSTRAP_ON_STARTUP=false，跳过启动初始化。")
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

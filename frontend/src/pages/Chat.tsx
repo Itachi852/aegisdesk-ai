@@ -162,6 +162,16 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
           return next;
         });
       },
+      onProgress: (progressEvent) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant" && last.thinking) {
+            next[next.length - 1] = { ...last, content: progressEvent.message };
+          }
+          return next;
+        });
+      },
       onDelta: (delta) => {
         setMessages((prev) => {
           const next = [...prev];
@@ -260,16 +270,6 @@ export function Chat({ sessionId, onSessionSelected, onSessionsChanged }: ChatPr
               <div className={`message ${item.role} ${item.thinking ? "thinking" : ""}`}>{item.content}</div>
               {item.role === "user" && item.intent ? (
                 <div className="message-intent">{INTENT_LABELS[item.intent] || "其他"}</div>
-              ) : null}
-              {item.role === "assistant" && item.sources?.length ? (
-                <div className="message-sources">
-                  <span>引用文件：</span>
-                  {dedupeSources(item.sources).map((source, sourceIndex) => (
-                    <span key={`${source.doc_name || "source"}-${sourceIndex}`} className="source-chip">
-                      {source.doc_name || "未知文档"}
-                    </span>
-                  ))}
-                </div>
               ) : null}
               {item.role === "assistant" && item.content && !item.thinking ? (
                 <div className="feedback-actions">

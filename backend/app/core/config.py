@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     jwt_secret_key: str = "replace-this-in-production"
     access_token_expire_minutes: int = 60 * 24
+    bootstrap_on_startup: bool = False
 
     mysql_host: str = "localhost"
     mysql_port: int = 3306
@@ -42,12 +43,14 @@ class Settings(BaseSettings):
     daily_question_limit: int = 100
     max_question_length: int = 500
     rag_top_k: int = 6
-    rag_rewrite_query_count: int = 3
-    rag_recall_per_query: int = 10
+    rag_rewrite_query_count: int = 2
+    rag_recall_per_query: int = 20
     rag_rrf_top_k: int = 20
     rag_rrf_k: int = 60
     rag_score_threshold: float = 0.5
     rag_adjacent_chunk_window: int = 1
+    rag_debug_log_enabled: bool = True
+    rag_debug_log_top_n: int = 20
 
     @computed_field
     @property
@@ -64,6 +67,18 @@ class Settings(BaseSettings):
             f"mysql+pymysql://{user}:{password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_db_name}?charset=utf8mb4"
         )
+
+    @computed_field
+    @property
+    def mysql_server_url(self) -> str:
+        """
+        生成不带数据库名的 MySQL Server 连接地址，用于首次创建数据库。
+
+        :return: MySQL Server 连接 URL。
+        """
+        user = quote_plus(self.mysql_user_name)
+        password = quote_plus(self.mysql_user_password)
+        return f"mysql+pymysql://{user}:{password}@{self.mysql_host}:{self.mysql_port}?charset=utf8mb4"
 
     @computed_field
     @property

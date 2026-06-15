@@ -1,6 +1,6 @@
 # AegisDesk AI
 
-AegisDesk AI 是一个基于大语言模型和 RAG 架构的企业智能客服系统。项目实现了用户注册登录、会话管理、知识库管理、向量检索、LLM 流式问答、引用来源展示、回答反馈、业务意图标注和每日提问次数限制等能力。
+AegisDesk AI 是一个基于大语言模型和 RAG 架构的企业智能客服系统。项目实现了用户注册登录、会话管理、知识库管理、向量检索、LLM 流式问答、回答末尾知识来源展示、回答反馈、业务意图标注和每日提问次数限制等能力。
 
 项目目标是完整展示一条企业级 AI 客服链路：
 
@@ -22,7 +22,7 @@ AegisDesk AI 是一个基于大语言模型和 RAG 架构的企业智能客服�
 ### AI 问答
 
 - SSE 流式输出，前端逐字展示 AI 回答。
-- 发送后展示“正在思考...”友好提示。
+- 发送后展示阶段进度提示，例如识别问题类型、检索知识库、筛选资料和生成回答。
 - 单次提问长度限制为 500 字。
 - 每个用户每日提问次数上限可配置，默认 100 次。
 - 本地业务意图分类，并在用户消息旁标注；分类按“投诉 > 售后问题 > 产品咨询 > 闲聊 > 其他”优先级匹配，带负面情绪的产品表达会优先归为投诉。
@@ -36,11 +36,11 @@ AegisDesk AI 是一个基于大语言模型和 RAG 架构的企业智能客服�
 
 - 上传企业共享知识库文档。
 - 文档解析、清洗、智能切分；QA 文档会按“一问一答一个 chunk”切分，普通文档继续按段落递归切分。
+- 上传时按文件内容 sha256 去重；同样内容已存在时提示“已存在相同内容的文档”，同名但内容不同允许上传。
 - chunk 写入 MySQL。
 - Embedding 向量写入 Qdrant。
 - 展示文档列表、上传时间、状态和 chunk 数量。
 - 删除知识库文档时同步删除 MySQL chunk 和 Qdrant 向量。
-- 所有登录用户共享同一套企业知识库。
 
 当前代码支持 `.txt`、`.md` 文档上传；依赖中已包含 PyMuPDF，后续可扩展 `.pdf`。
 
@@ -53,7 +53,7 @@ AegisDesk AI 是一个基于大语言模型和 RAG 架构的企业智能客服�
 - 多 query 召回后进行外层 RRF 融合。
 - 百炼/通义 Rerank 重排序。
 - 相关性过滤，避免不相关知识片段进入 Prompt。
-- AI 回答展示引用文件和片段摘要。
+- AI 回答正文末尾按文档聚合展示知识来源，包含文档名称和命中 chunk 摘要；前端不再额外渲染独立的“引用文件”行。
 
 ### 反馈
 
@@ -123,6 +123,20 @@ aegisdesk-ai/
 
 ### 1. 初始化数据库
 
+演示环境可以在 `backend/.env` 开启：
+
+```env
+BOOTSTRAP_ON_STARTUP=true
+```
+
+开启后，FastAPI 启动时会自动创建数据库和表，并导入 `testdocs` 下的测试知识库。也可以在项目根目录手动执行：
+
+```powershell
+python testdocs\bootstrap.py
+```
+
+如果不使用启动初始化，可以手动执行初始化脚本：
+
 ```powershell
 cd backend
 mysql -uroot -p < 数据库初始化脚本/init.sql
@@ -186,7 +200,7 @@ MYSQL_HOST=localhost
 MYSQL_PORT=3306
 MYSQL_USER_NAME=root
 MYSQL_USER_PASSWORD=password
-MYSQL_DB_NAME=aegisdeskAI
+MYSQL_DB_NAME=aegisdeskai
 
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=

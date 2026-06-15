@@ -207,28 +207,39 @@ event: session
 data: {"session_id":1,"user_message_id":10,"intent":"after_sales"}
 ```
 
-事件 2：模型增量输出
+事件 2：处理进度
+
+```text
+event: progress
+data: {"stage":"retrieve","message":"正在检索知识库..."}
+```
+
+`stage` 可能值包括 `preparing`、`intent`、`rewrite`、`retrieve`、`rerank`、`generate`。该事件只用于前端展示当前处理阶段，不会保存为聊天消息。
+
+事件 3：模型增量输出
 
 ```text
 event: message
 data: {"type":"delta","content":"您好"}
 ```
 
-事件 3：引用来源
+事件 4：引用来源
 
 ```text
 event: source
 data: {"items":[{"document_id":1,"chunk_id":2,"doc_name":"退换货政策.txt","summary":"7天无理由退货...","score":0.82}]}
 ```
 
-事件 4：完成
+该事件用于保存 `message_sources` 和后续审计调试；当前前端聊天页不再单独渲染“引用文件：...”区域，知识来源由 AI 回答正文末尾按文档名称和 chunk 摘要聚合展示。
+
+事件 5：完成
 
 ```text
 event: done
 data: {"sources_count":1}
 ```
 
-事件 5：消息保存完成
+事件 6：消息保存完成
 
 ```text
 event: saved
@@ -252,7 +263,7 @@ Content-Type: multipart/form-data
 file: 文档文件
 ```
 
-当前实现支持 `.txt`、`.md`。如果正文中能识别出 3 组及以上 `Q/A`、`问/答`、`问题/答案` 结构，会按“一问一答一个 chunk”切分；否则按普通文本递归切分。项目依赖中包含 PyMuPDF，可扩展支持 `.pdf`。
+当前实现支持 `.txt`、`.md`。上传时会计算文件内容 `sha256` 并按 `file_hash` 去重：同样内容已存在且状态为“就绪”时返回 `409` 和“已存在相同内容的文档”；同样内容正在处理时返回“相同文档正在处理中”；同名但内容不同允许上传。如果正文中能识别出 3 组及以上 `Q/A`、`问/答`、`问题/答案` 结构，会按“一问一答一个 chunk”切分；否则按普通文本递归切分。项目依赖中包含 PyMuPDF，可扩展支持 `.pdf`。
 
 前端上传交互会先插入一条本地“处理中”记录，接口返回后再用后端返回的文档状态覆盖该记录。
 
@@ -263,6 +274,7 @@ file: 文档文件
   "id": 1,
   "name": "退换货政策.txt",
   "file_type": "txt",
+  "file_hash": "8f14e45fceea167a5a36dedd4bea2543a1c49d3d0f8d9a4c2a6f0b7e5c9d1a2b3c",
   "status": "就绪",
   "error_message": null,
   "chunk_count": 6,

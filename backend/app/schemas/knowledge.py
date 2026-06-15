@@ -7,6 +7,7 @@ class KnowledgeDocumentResponse(BaseModel):
     id: int
     name: str
     file_type: str
+    file_hash: str | None = None
     status: str
     error_message: str | None = None
     chunk_count: int = 0
